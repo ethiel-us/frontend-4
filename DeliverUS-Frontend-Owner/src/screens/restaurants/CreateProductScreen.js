@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import InputItem from '../../components/InputItem'
@@ -16,6 +16,7 @@ import ImagePicker from '../../components/ImagePicker'
 export default function CreateProductScreen({ navigation, route }) {
   const [open, setOpen] = useState(false)
   const [productCategories, setProductCategories] = useState([])
+  const [backendErrors, setBackendErrors] = useState([])
 
   const initialProductValues = {
     name: null,
@@ -26,7 +27,22 @@ export default function CreateProductScreen({ navigation, route }) {
     productCategoryId: null,
     availability: true
   }
-  
+
+  const validationSchema = yup.object().shape({
+    name: yup
+      .string()
+      .max(255, 'name is too long')
+      .required('name is required'),
+    price: yup.number().positive().integer().required('price is required'),
+    order: yup.number().positive().integer().nullable(),
+    productCategoryId: yup
+      .number()
+      .positive()
+      .integer()
+      .required('product category is required'),
+    availability: yup.boolean().required()
+  })
+
   useEffect(() => {
     async function fetchProductCategories() {
       try {
@@ -52,10 +68,32 @@ export default function CreateProductScreen({ navigation, route }) {
     fetchProductCategories()
   }, [])
 
-  
+  const createProduct = async values => {
+    setBackendErrors([])
+    try {
+      const createdProduct = await create(values)
+      showMessage({
+        message: `product ${createdProduct.name} has been created`,
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        textStyle: GlobalStyles.flashTextStyle
+      })
+      navigation.navigate(
+        'RestaurantDetailScreen',
+        { id: route.params.id },
+        { dirty: true }
+      )
+    } catch (error) {
+      console.log(error)
+      setBackendErrors(error.errors)
+    }
+  }
+
   return (
     <Formik
       initialValues={initialProductValues}
+      validationSchema={validationSchema}
+      onSubmit={createProduct}
     >
       {({ handleSubmit, setFieldValue, values }) => (
         <ScrollView>
@@ -80,7 +118,11 @@ export default function CreateProductScreen({ navigation, route }) {
                 style={{ backgroundColor: GlobalStyles.brandBackground }}
                 dropDownStyle={{ backgroundColor: '#fafafa' }}
               />
-            
+
+              <ErrorMessage
+                name={'productCategoryId'}
+                render={msg => <TextError>{msg}</TextError>}
+              />
 
               <TextRegular>Is it available?</TextRegular>
               <Switch
@@ -95,7 +137,6 @@ export default function CreateProductScreen({ navigation, route }) {
                 style={styles.switch}
                 onValueChange={value => setFieldValue('availability', value)}
               />
-     
 
               <ImagePicker
                 label="Image:"
@@ -104,10 +145,15 @@ export default function CreateProductScreen({ navigation, route }) {
                 onImagePicked={result => setFieldValue('image', result)}
               />
 
- 
+              {backendErrors &&
+                backendErrors.map((err, index) => (
+                  <TextError key={index}>
+                    {err.param}-{err.msg}
+                  </TextError>
+                ))}
 
               <Pressable
-                onPress={() => console.log('Button pressed')}
+                onPress={handleSubmit}
                 style={({ pressed }) => [
                   {
                     backgroundColor: pressed

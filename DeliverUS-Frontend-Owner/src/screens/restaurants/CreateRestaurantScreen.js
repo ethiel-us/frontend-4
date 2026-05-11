@@ -14,9 +14,10 @@ import { ErrorMessage, Formik } from 'formik'
 import TextError from '../../components/TextError'
 import ImagePicker from '../../components/ImagePicker' // <--- IMPORTA TU NUEVO COMPONENTE
 
-export default function CreateRestaurantScreen({ navigation }) {
+export default function CreateRestaurantScreen({ navigation, route }) {
   const [open, setOpen] = useState(false)
   const [restaurantCategories, setRestaurantCategories] = useState([])
+  const [backendErrors, setBackendErrors] = useState()
 
   const initialRestaurantValues = {
     name: null,
@@ -29,7 +30,30 @@ export default function CreateRestaurantScreen({ navigation }) {
     phone: null,
     restaurantCategoryId: null
   }
-  
+
+  const validationSchema = yup.object().shape({
+    name: yup.string().max(255, 'Name too long').required('Name is required'),
+    address: yup
+      .string()
+      .max(255, 'Address too long')
+      .required('Address ir required'),
+    postalCode: yup
+      .string()
+      .max(255, 'Postal code too long')
+      .required('Postal code is required'),
+    url: yup.string().nullable().url('Please enter a valid url'),
+    shippingCosts: yup
+      .number()
+      .positive('Please provide a valid shipping cost value')
+      .required('Shipping costs value is required'),
+    email: yup.string().nullable().email('Please enter a valid email'),
+    phone: yup.string().nullable().max(255, 'Phone too long'),
+    restaurantCategoryId: yup
+      .number()
+      .positive()
+      .integer()
+      .required('Restaurant category is required')
+  })
 
   useEffect(() => {
     async function fetchRestaurantCategories() {
@@ -55,10 +79,29 @@ export default function CreateRestaurantScreen({ navigation }) {
     fetchRestaurantCategories()
   }, [])
 
-  
+  const createRestaurant = async values => {
+    setBackendErrors([])
+    try {
+      const createdRestaurant = await create(values)
+      showMessage({
+        message: `Restaurant ${createdRestaurant.name} has been created`,
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+      navigation.navigate('RestaurantsScreen', { dirty: true })
+    } catch (error) {
+      console.log(error)
+      setBackendErrors(error.errors)
+    }
+  }
+
   return (
     <Formik
-      initialValues={initialRestaurantValues}>
+      validationSchema={validationSchema}
+      initialValues={initialRestaurantValues}
+      onSubmit={createRestaurant}
+    >
       {({ handleSubmit, setFieldValue, values }) => (
         <ScrollView>
           <View style={{ alignItems: 'center' }}>
@@ -86,7 +129,12 @@ export default function CreateRestaurantScreen({ navigation }) {
                 style={{ backgroundColor: GlobalStyles.brandBackground }}
                 dropDownStyle={{ backgroundColor: '#fafafa' }}
               />
-             
+
+              <ErrorMessage
+                name={'restaurantCategoryId'}
+                render={msg => <TextError>{msg}</TextError>}
+              />
+
               <ImagePicker
                 label="Logo:"
                 image={values.logo}
@@ -101,9 +149,15 @@ export default function CreateRestaurantScreen({ navigation }) {
                 onImagePicked={result => setFieldValue('heroImage', result)}
               />
 
-             
+              {backendErrors &&
+                backendErrors.map((error, index) => (
+                  <TextError key={index}>
+                    {error.param}-{error.msg}
+                  </TextError>
+                ))}
+
               <Pressable
-                onPress={() => console.log('Submit pressed')}
+                onPress={handleSubmit}
                 style={({ pressed }) => [
                   {
                     backgroundColor: pressed
